@@ -1,0 +1,25 @@
+# Gradle / Android
+.gradle/
+build/
+app/build/
+.kotlin/
+
+# Configuración local (ruta del SDK de esta PC)
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# APK de trabajo: se publica en GitHub Releases, no se versiona
+NoSeMueran.apk
+*.apk
+
+# Claves de firma: nunca subir
+*.jks
+*.keystore
+
+# Sistema
+Thumbs.db
+.DS_Store
