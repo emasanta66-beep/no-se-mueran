@@ -19,7 +19,7 @@ sealed interface UpdateState {
     data object Checking : UpdateState
     data object UpToDate : UpdateState
     data class Available(val info: UpdateInfo) : UpdateState
-    data class Downloading(val progress: Int) : UpdateState
+    data class Downloading(val progress: Int?) : UpdateState
     data class Downloaded(val info: UpdateInfo, val file: File) : UpdateState
     data class Failed(val message: String) : UpdateState
 }
@@ -49,10 +49,10 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
 
     fun download(info: UpdateInfo) {
         if (_state.value is UpdateState.Downloading) return
-        _state.value = UpdateState.Downloading(0)
+        _state.value = UpdateState.Downloading(null)
         scope.launch {
             Updater.download(getApplication(), info) { percent ->
-                if (percent in 0..100) {
+                if (percent == null || percent in 0..100) {
                     _state.value = UpdateState.Downloading(percent)
                 }
             }.fold(
@@ -63,6 +63,10 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun reset() {
+        val current = _state.value
+        if (current is UpdateState.Downloaded) {
+            runCatching { current.file.delete() }
+        }
         _state.value = UpdateState.Idle
     }
 

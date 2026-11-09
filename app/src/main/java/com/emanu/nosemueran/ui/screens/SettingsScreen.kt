@@ -51,7 +51,11 @@ import com.emanu.nosemueran.update.UpdateViewModel
 import com.emanu.nosemueran.update.Updater
 
 @Composable
-fun SettingsScreen(vm: MainViewModel, autoCheck: Boolean = false) {
+fun SettingsScreen(
+    vm: MainViewModel,
+    autoCheck: Boolean = false,
+    onAutoCheck: () -> Unit = {}
+) {
     val enabled by vm.notifications.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val updateVm: UpdateViewModel = viewModel()
@@ -60,12 +64,15 @@ fun SettingsScreen(vm: MainViewModel, autoCheck: Boolean = false) {
     val versionName = remember {
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "1.0.1"
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "?"
     }
 
-    // Al entrar desde el aviso de actualización, buscamos una vez.
-    LaunchedEffect(Unit) {
-        if (autoCheck && updateVm.state.value is UpdateState.Idle) updateVm.check()
+    // Al entrar desde el aviso de actualización, buscamos una sola vez.
+    LaunchedEffect(autoCheck) {
+        if (autoCheck) {
+            if (updateVm.state.value is UpdateState.Idle) updateVm.check()
+            onAutoCheck()
+        }
     }
 
     LazyColumn(
@@ -149,7 +156,7 @@ fun SettingsScreen(vm: MainViewModel, autoCheck: Boolean = false) {
                     when (val state = updateState) {
                         UpdateState.Idle -> {
                             Text(
-                                "La app solo se conecta a GitHub cuando pedís buscar una actualización.",
+                                "La app revisa una vez al día si hay una versión nueva. También podés buscarla ahora.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted
                             )
@@ -210,16 +217,23 @@ fun SettingsScreen(vm: MainViewModel, autoCheck: Boolean = false) {
 
                         is UpdateState.Downloading -> Column {
                             Text(
-                                "Descargando… ${state.progress}%",
+                                state.progress?.let { "Descargando… $it%" } ?: "Descargando…",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = LeafDark
                             )
                             Spacer(Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { state.progress / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                                color = LeafGreen
-                            )
+                            if (state.progress == null) {
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = LeafGreen
+                                )
+                            } else {
+                                LinearProgressIndicator(
+                                    progress = { state.progress / 100f },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = LeafGreen
+                                )
+                            }
                         }
 
                         is UpdateState.Downloaded -> Column {
@@ -282,7 +296,7 @@ fun SettingsScreen(vm: MainViewModel, autoCheck: Boolean = false) {
                     Text("Tus datos quedan acá", style = MaterialTheme.typography.titleMedium, color = LeafDark)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Plantas, fotos y notas se guardan solo en este teléfono. La única conexión a internet es para buscar actualizaciones cuando vos lo pedís.",
+                        "Plantas, fotos y notas se guardan solo en este teléfono. La única conexión a internet es para buscar actualizaciones: una vez al día y cuando vos lo pedís.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = LeafDark
                     )

@@ -48,6 +48,9 @@ object Updater {
     private const val UPDATE_CHANNEL = "actualizaciones"
     private const val UPDATE_NOTIFICATION_ID = 2002
 
+    private const val PREFS = "actualizador"
+    private const val KEY_ULTIMO_AVISO = "ultimo_aviso_version"
+
     const val EXTRA_OPEN_UPDATES = "abrir_actualizaciones"
 
     fun currentVersionCode(context: Context): Long =
@@ -94,7 +97,7 @@ object Updater {
     suspend fun download(
         context: Context,
         info: UpdateInfo,
-        onProgress: (Int) -> Unit
+        onProgress: (Int?) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
             val dir = File(context.cacheDir, "updates").apply { mkdirs() }
@@ -110,6 +113,8 @@ object Updater {
                 val total = conn.contentLengthLong
                 var done = 0L
                 var lastPercent = -1
+                // Si GitHub no informa el tamaño, mostramos progreso indeterminado.
+                if (total <= 0L) onProgress(null)
                 conn.inputStream.use { input ->
                     FileOutputStream(target).use { output ->
                         val buffer = ByteArray(64 * 1024)
@@ -193,6 +198,10 @@ object Updater {
         ) return false
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
 
+        // No repetir el aviso todos los días por la misma versión.
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getLong(KEY_ULTIMO_AVISO, 0L) >= info.versionCode) return false
+
         ensureUpdateChannel(context)
 
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -220,6 +229,7 @@ object Updater {
 
         return runCatching {
             NotificationManagerCompat.from(context).notify(UPDATE_NOTIFICATION_ID, notification)
+            prefs.edit().putLong(KEY_ULTIMO_AVISO, info.versionCode).apply()
             true
         }.getOrDefault(false)
     }

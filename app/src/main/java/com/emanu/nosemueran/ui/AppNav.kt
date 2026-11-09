@@ -60,7 +60,7 @@ private val tabs = listOf(
 private val topLevelRoutes = tabs.map { it.route }.toSet()
 
 @Composable
-fun AppNav(openUpdates: Boolean = false) {
+fun AppNav(openUpdates: Boolean = false, onUpdatesHandled: () -> Unit = {}) {
     val nav = rememberNavController()
     val vm: MainViewModel = viewModel()
     val backStackEntry by nav.currentBackStackEntryAsState()
@@ -89,7 +89,9 @@ fun AppNav(openUpdates: Boolean = false) {
             composable("jardin") { GardenScreen(vm, nav) }
             composable("catalogo") { CatalogScreen(nav) }
             composable("diagnostico") { DiagnoseScreen() }
-            composable("ajustes") { SettingsScreen(vm, autoCheck = openUpdates) }
+            composable("ajustes") {
+                SettingsScreen(vm, autoCheck = openUpdates, onAutoCheck = onUpdatesHandled)
+            }
 
             composable("planta/{id}") { entry ->
                 PlantDetailScreen(vm, nav, entry.arguments?.getString("id").orEmpty())

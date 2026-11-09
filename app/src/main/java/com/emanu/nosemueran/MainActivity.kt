@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NoSeMueranTheme {
-                AppNav(openUpdates = openUpdates)
+                AppNav(openUpdates = openUpdates, onUpdatesHandled = { openUpdates = false })
             }
         }
     }
