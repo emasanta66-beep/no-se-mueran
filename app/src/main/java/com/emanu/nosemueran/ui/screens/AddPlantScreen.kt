@@ -1,5 +1,6 @@
 package com.emanu.nosemueran.ui.screens
 
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -58,10 +60,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.emanu.nosemueran.data.Species
 import com.emanu.nosemueran.data.SpeciesCatalog
 import com.emanu.nosemueran.ui.MainViewModel
 import com.emanu.nosemueran.ui.components.ScreenHeader
 import com.emanu.nosemueran.ui.components.SectionLabel
+import com.emanu.nosemueran.ui.components.SpeciesCareCard
+import com.emanu.nosemueran.ui.components.SpeciesPickerDialog
 import com.emanu.nosemueran.ui.components.rememberPhotoPicker
 import com.emanu.nosemueran.ui.theme.Clay
 import com.emanu.nosemueran.ui.theme.LeafDark
@@ -70,6 +75,11 @@ import com.emanu.nosemueran.ui.theme.Muted
 import com.emanu.nosemueran.ui.theme.Paper
 import com.emanu.nosemueran.ui.theme.Sage
 import com.emanu.nosemueran.ui.theme.SoftMint
+import com.emanu.nosemueran.util.ImageAnalysis
+import com.emanu.nosemueran.util.PhotoAnalysis
+import com.emanu.nosemueran.util.PhotoHints
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -85,11 +95,32 @@ fun AddPlantScreen(vm: MainViewModel, nav: NavController, editId: String?) {
     var notes by remember(editId) { mutableStateOf(editing?.notes.orEmpty()) }
     var days by remember(editId) { mutableIntStateOf(editing?.wateringDays ?: 7) }
     var photo by remember(editId) { mutableStateOf(editing?.photoPath) }
+    var showPicker by remember { mutableStateOf(false) }
+    var analysis by remember(editId) { mutableStateOf<PhotoAnalysis?>(null) }
+
+    val matched = remember(species) { SpeciesCatalog.find(species) }
+
+    fun applySpecies(sp: Species) {
+        species = sp.name
+        days = sp.wateringDays
+    }
 
     val picker = rememberPhotoPicker { path ->
         // Si se reemplaza una foto temporal, borramos la anterior.
         vm.discardPhoto(photo)
         photo = path
+    }
+
+    // Analizamos la foto para sugerir especies (aproximado, por colores).
+    LaunchedEffect(photo) {
+        analysis = photo?.let { path ->
+            withContext(Dispatchers.Default) { ImageAnalysis.analyzeFile(path) }
+        }
+    }
+
+    val photoHints = remember(analysis, species) {
+        val a = analysis
+        if (a == null || species.isNotBlank()) emptyList() else PhotoHints.candidates(a)
     }
 
     // Si se sale de la pantalla sin guardar, la foto temporal no queda huérfana.
@@ -192,6 +223,60 @@ fun AddPlantScreen(vm: MainViewModel, nav: NavController, editId: String?) {
                 }
             }
 
+            if (photoHints.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = SoftMint,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(
+                            "Según los colores de la foto puede ser...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        photoHints.chunked(2).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowItems.forEach { hintName ->
+                                    val hint = SpeciesCatalog.find(hintName)
+                                    if (hint != null) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Paper,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(CircleShape)
+                                                .clickable { applySpecies(hint) }
+                                        ) {
+                                            Text(
+                                                "${hint.emoji} ${hint.name}",
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = LeafDark,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Text(
+                            "Es una ayuda aproximada, no reconoce la especie exacta. Podés elegir otra abajo.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(20.dp))
             AppField(
                 value = name,
@@ -205,8 +290,18 @@ fun AddPlantScreen(vm: MainViewModel, nav: NavController, editId: String?) {
                 value = species,
                 onValueChange = { species = it },
                 label = "Especie (opcional)",
-                placeholder = "Ej: Monstera, Potus, Cactus..."
+                placeholder = "Ej: Tomate, Lechuga, Papa..."
             )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { showPicker = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Filled.LocalFlorist, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Elegir del catálogo")
+            }
             if (suggestions.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -216,10 +311,7 @@ fun AddPlantScreen(vm: MainViewModel, nav: NavController, editId: String?) {
                             color = SoftMint,
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .clickable {
-                                    species = suggestion.name
-                                    days = suggestion.wateringDays
-                                }
+                                .clickable { applySpecies(suggestion) }
                         ) {
                             Text(
                                 "${suggestion.emoji} ${suggestion.name}",
@@ -232,6 +324,13 @@ fun AddPlantScreen(vm: MainViewModel, nav: NavController, editId: String?) {
                         }
                     }
                 }
+            }
+            if (matched != null) {
+                Spacer(Modifier.height(12.dp))
+                SpeciesCareCard(
+                    species = matched,
+                    onOpenDetail = { nav.navigate("especie/${Uri.encode(matched.name)}") }
+                )
             }
 
             Spacer(Modifier.height(14.dp))
@@ -320,6 +419,18 @@ fun AddPlantScreen(vm: MainViewModel, nav: NavController, editId: String?) {
                 Text(if (editId == null) "Agregar al jardín" else "Guardar cambios")
             }
         }
+    }
+
+    if (showPicker) {
+        SpeciesPickerDialog(
+            title = "Elegir especie",
+            initialQuery = species,
+            onDismiss = { showPicker = false },
+            onPick = { picked ->
+                applySpecies(picked)
+                showPicker = false
+            }
+        )
     }
 }
 

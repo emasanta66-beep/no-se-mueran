@@ -16,6 +16,9 @@ local.properties
 NoSeMueran.apk
 *.apk
 
+# Log de compilación local
+build-log.txt
+
 # Claves de firma: nunca subir
 *.jks
 *.keystore

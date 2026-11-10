@@ -3,6 +3,8 @@ package com.emanu.nosemueran.ui.screens
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,9 +62,12 @@ import androidx.navigation.NavController
 import com.emanu.nosemueran.data.Prefill
 import com.emanu.nosemueran.data.Species
 import com.emanu.nosemueran.data.SpeciesCatalog
+import com.emanu.nosemueran.data.SpeciesCategory
+import com.emanu.nosemueran.data.SowingCalendar
 import com.emanu.nosemueran.ui.MainViewModel
 import com.emanu.nosemueran.ui.components.InfoChip
 import com.emanu.nosemueran.ui.components.SectionLabel
+import com.emanu.nosemueran.ui.components.SowingInfo
 import com.emanu.nosemueran.ui.theme.Clay
 import com.emanu.nosemueran.ui.theme.LeafDark
 import com.emanu.nosemueran.ui.theme.LeafGreen
@@ -70,17 +76,16 @@ import com.emanu.nosemueran.ui.theme.Paper
 import com.emanu.nosemueran.ui.theme.Sage
 import com.emanu.nosemueran.ui.theme.SoftMint
 import com.emanu.nosemueran.ui.theme.Sunny
+import java.time.LocalDate
 
 @Composable
 fun CatalogScreen(nav: NavController) {
+    var tab by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf<SpeciesCategory?>(null) }
 
-    val filtered = remember(query) {
-        val q = query.trim()
-        if (q.isBlank()) SpeciesCatalog.all
-        else SpeciesCatalog.all.filter {
-            it.name.contains(q, ignoreCase = true) || it.scientific.contains(q, ignoreCase = true)
-        }
+    val filtered = remember(query, category) {
+        SpeciesCatalog.search(query).filter { category == null || it.category == category }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -92,37 +97,269 @@ fun CatalogScreen(nav: NavController) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = Muted
             )
-            Spacer(Modifier.height(16.dp))
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Buscar una planta...") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Sage) },
-                singleLine = true,
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TabChip("🌿 Especies", tab == 0) { tab = 0 }
+                TabChip("🗓 Temporada", tab == 1) { tab = 1 }
+            }
+            if (tab == 0) {
+                Spacer(Modifier.height(14.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Buscar una planta...") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Sage) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    CategoryChip("Todas", category == null) { category = null }
+                    SpeciesCategory.values().forEach { cat ->
+                        CategoryChip("${cat.emoji} ${cat.label}", category == cat) { category = cat }
+                    }
+                }
+            }
         }
 
-        if (filtered.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (tab == 0) {
+            if (filtered.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No encontré esa planta.\nProbá con otro nombre.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Muted
+                    )
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SpeciesCategory.values().forEach { cat ->
+                        val list = filtered.filter { it.category == cat }
+                        if (list.isNotEmpty()) {
+                            item(key = "header-${cat.name}") {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                ) {
+                                    Text(cat.emoji, fontSize = 14.sp)
+                                    Spacer(Modifier.width(6.dp))
+                                    SectionLabel("${cat.label} · ${list.size}")
+                                }
+                            }
+                            items(list, key = { it.name }) { species ->
+                                SpeciesRow(species) {
+                                    nav.navigate("especie/${Uri.encode(species.name)}")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            SeasonTab(nav)
+        }
+    }
+}
+
+@Composable
+private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = if (selected) LeafGreen else SoftMint,
+        contentColor = if (selected) Color.White else LeafDark,
+        modifier = Modifier
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+@Composable
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = if (selected) LeafDark else Paper,
+        contentColor = if (selected) Color.White else Muted,
+        border = if (selected) null else BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)
+        ),
+        modifier = Modifier
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+@Composable
+private fun SeasonTab(nav: NavController) {
+    var month by remember { mutableIntStateOf(LocalDate.now().monthValue) }
+    val guide = remember(month) { SowingCalendar.forMonth(month) }
+    val sowable = remember(month) { SpeciesCatalog.sowableIn(month) }
+
+    LazyColumn(
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                SowingCalendar.monthNames.forEachIndexed { index, name ->
+                    val value = index + 1
+                    Surface(
+                        shape = CircleShape,
+                        color = if (value == month) LeafGreen else Paper,
+                        contentColor = if (value == month) Color.White else Muted,
+                        border = if (value == month) null else BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)
+                        ),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { month = value }
+                    ) {
+                        Text(
+                            name.take(3),
+                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = SoftMint,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(18.dp)) {
+                    Text(
+                        "Qué sembrar en ${guide.name}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = LeafDark
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        guide.tip,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LeafDark
+                    )
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionLabel("${monthName(month)} · ${sowable.size} especies")
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    "No encontré esa planta.\nProbá con otro nombre.",
+                    SowingCalendar.ZONE_NOTE,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted
+                )
+            }
+        }
+
+        if (sowable.isEmpty()) {
+            item {
+                Text(
+                    "Este mes la huerta de la zona central está en pausa. Podés preparar la tierra y hacer almácigos bajo techo.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Muted
                 )
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(filtered, key = { it.name }) { species ->
-                    SpeciesRow(species) {
-                        nav.navigate("especie/${Uri.encode(species.name)}")
-                    }
+            items(sowable, key = { "sow-${it.name}" }) { species ->
+                SowingRow(species) {
+                    nav.navigate("especie/${Uri.encode(species.name)}")
                 }
             }
+        }
+
+        item {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Las fechas son orientativas: dependen del microclima de tu patio, de si hay heladas y de la variedad que siembres.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted
+            )
+        }
+    }
+}
+
+private fun monthName(month: Int): String = SowingCalendar.forMonth(month).name
+
+@Composable
+private fun SowingRow(species: Species, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Paper),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(SoftMint),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(species.emoji, fontSize = 22.sp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    species.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = LeafDark,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(1.dp))
+                Text(
+                    buildString {
+                        append(species.sowingMethod?.label ?: "Siembra")
+                        species.harvestDays?.let { append(" · ~$it días") }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Sage)
         }
     }
 }
@@ -232,11 +469,22 @@ fun SpeciesDetailScreen(vm: MainViewModel, nav: NavController, speciesName: Stri
             )
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                InfoChip("${species.category.emoji} ${species.category.label}")
                 InfoChip(species.difficulty, highlight = species.difficulty == "Alta")
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 InfoChip("Riego cada ${species.wateringDays} días", Icons.Filled.WaterDrop)
             }
             Spacer(Modifier.height(16.dp))
             Text(species.description, style = MaterialTheme.typography.bodyLarge, color = LeafDark)
+
+            if (species.sowsInCentralChile) {
+                Spacer(Modifier.height(20.dp))
+                SectionLabel("Siembra en la zona central")
+                Spacer(Modifier.height(8.dp))
+                SowingInfo(species)
+            }
 
             Spacer(Modifier.height(24.dp))
             SectionLabel("Cuidados")

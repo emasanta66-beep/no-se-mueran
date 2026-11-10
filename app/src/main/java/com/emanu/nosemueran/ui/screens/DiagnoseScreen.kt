@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Button
@@ -34,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,18 +52,21 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.emanu.nosemueran.data.Species
+import com.emanu.nosemueran.data.SpeciesCatalog
+import com.emanu.nosemueran.ui.components.InfoChip
 import com.emanu.nosemueran.ui.components.SectionLabel
+import com.emanu.nosemueran.ui.components.SpeciesPickerDialog
 import com.emanu.nosemueran.ui.components.rememberPhotoPicker
-import com.emanu.nosemueran.ui.theme.Clay
 import com.emanu.nosemueran.ui.theme.LeafDark
 import com.emanu.nosemueran.ui.theme.LeafGreen
 import com.emanu.nosemueran.ui.theme.Muted
 import com.emanu.nosemueran.ui.theme.Paper
 import com.emanu.nosemueran.ui.theme.Sage
 import com.emanu.nosemueran.ui.theme.SoftMint
-import com.emanu.nosemueran.ui.theme.Sunny
+import com.emanu.nosemueran.util.DiagnoseAnswers
 import com.emanu.nosemueran.util.ImageAnalysis
-import com.emanu.nosemueran.util.LeafStats
+import com.emanu.nosemueran.util.PhotoAnalysis
 import com.emanu.nosemueran.util.PhotoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,25 +76,53 @@ import kotlin.math.roundToInt
 @Composable
 fun DiagnoseScreen() {
     var photoPath by remember { mutableStateOf<String?>(null) }
-    var stats by remember { mutableStateOf<LeafStats?>(null) }
+    var analysis by remember { mutableStateOf<PhotoAnalysis?>(null) }
     var analyzing by remember { mutableStateOf(false) }
     var analyzed by remember { mutableStateOf(false) }
+    var species by remember { mutableStateOf<Species?>(null) }
+    var showPicker by remember { mutableStateOf(false) }
 
     var soilDry by remember { mutableStateOf(false) }
+    var overwatered by remember { mutableStateOf(false) }
     var yellowLeaves by remember { mutableStateOf(false) }
     var brownSpots by remember { mutableStateOf(false) }
     var directSun by remember { mutableStateOf(false) }
+    var deformedLeaves by remember { mutableStateOf(false) }
+    var bugs by remember { mutableStateOf(false) }
+    var whitePowder by remember { mutableStateOf(false) }
+    var softStem by remember { mutableStateOf(false) }
+    var cold by remember { mutableStateOf(false) }
+    var recentlyTransplanted by remember { mutableStateOf(false) }
+    var noDrainage by remember { mutableStateOf(false) }
+    var fertilized by remember { mutableStateOf(false) }
+    var holesInLeaves by remember { mutableStateOf(false) }
+    var spottedFruit by remember { mutableStateOf(false) }
+
+    fun resetAnswers() {
+        soilDry = false
+        overwatered = false
+        yellowLeaves = false
+        brownSpots = false
+        directSun = false
+        deformedLeaves = false
+        bugs = false
+        whitePowder = false
+        softStem = false
+        cold = false
+        recentlyTransplanted = false
+        noDrainage = false
+        fertilized = false
+        holesInLeaves = false
+        spottedFruit = false
+    }
 
     val picker = rememberPhotoPicker { path ->
         // La foto del diagnóstico es temporal: al reemplazarla, borramos la anterior.
         PhotoStore.delete(photoPath)
         photoPath = path
-        stats = null
+        analysis = null
         analyzed = false
-        soilDry = false
-        yellowLeaves = false
-        brownSpots = false
-        directSun = false
+        resetAnswers()
     }
 
     // Al salir de la pantalla borramos la foto temporal del análisis.
@@ -102,14 +135,32 @@ fun DiagnoseScreen() {
         val path = photoPath ?: return@LaunchedEffect
         analyzing = true
         analyzed = false
-        stats = null
-        stats = withContext(Dispatchers.Default) { ImageAnalysis.analyzeFile(path) }
+        analysis = null
+        analysis = withContext(Dispatchers.Default) { ImageAnalysis.analyzeFile(path) }
         analyzing = false
         analyzed = true
     }
 
-    val diagnosis = remember(stats, soilDry, yellowLeaves, brownSpots, directSun) {
-        ImageAnalysis.diagnose(stats, soilDry, yellowLeaves, brownSpots, directSun)
+    val answers = DiagnoseAnswers(
+        soilDry = soilDry,
+        overwatered = overwatered,
+        yellowLeaves = yellowLeaves,
+        brownSpots = brownSpots,
+        directSun = directSun,
+        deformedLeaves = deformedLeaves,
+        bugs = bugs,
+        whitePowder = whitePowder,
+        softStem = softStem,
+        cold = cold,
+        recentlyTransplanted = recentlyTransplanted,
+        noDrainage = noDrainage,
+        fertilized = fertilized,
+        holesInLeaves = holesInLeaves,
+        spottedFruit = spottedFruit
+    )
+
+    val diagnosis = remember(analysis, answers, species) {
+        ImageAnalysis.diagnose(analysis?.leaf, answers, species)
     }
 
     LazyColumn(
@@ -200,6 +251,49 @@ fun DiagnoseScreen() {
             }
         }
 
+        item {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Paper,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    SectionLabel("¿Qué planta es?")
+                    Spacer(Modifier.height(8.dp))
+                    if (species == null) {
+                        Text(
+                            "Elegirla ayuda a darte consejos más precisos. Es opcional.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { showPicker = true },
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Filled.LocalFlorist, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Elegir especie")
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            InfoChip("${species!!.emoji} ${species!!.name}")
+                            Spacer(Modifier.width(6.dp))
+                            TextButton(onClick = { species = null }) {
+                                Text("Quitar", color = Muted)
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${species!!.light} · riego cada ${species!!.wateringDays} días · ${species!!.difficulty}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+                    }
+                }
+            }
+        }
+
         if (analyzing) {
             item {
                 Row(
@@ -216,7 +310,7 @@ fun DiagnoseScreen() {
             }
         }
 
-        if (analyzed && stats != null) {
+        if (analyzed && analysis != null) {
             item {
                 Card(
                     shape = RoundedCornerShape(22.dp),
@@ -226,19 +320,26 @@ fun DiagnoseScreen() {
                     Column(Modifier.padding(16.dp)) {
                         SectionLabel("Lo que veo en la foto")
                         Spacer(Modifier.height(12.dp))
-                        StatBar("Verde sano", stats!!.green, Color(0xFF6B9B6E))
+                        val leaf = analysis!!.leaf
+                        StatBar("Verde sano", leaf.green, Color(0xFF6B9B6E))
                         Spacer(Modifier.height(10.dp))
-                        StatBar("Amarillo", stats!!.yellow, Color(0xFFDDB33F))
+                        StatBar("Amarillo", leaf.yellow, Color(0xFFDDB33F))
                         Spacer(Modifier.height(10.dp))
-                        StatBar("Marrón", stats!!.brown, Color(0xFFA9713F))
+                        StatBar("Marrón", leaf.brown, Color(0xFFA9713F))
                         Spacer(Modifier.height(10.dp))
-                        StatBar("Zonas oscuras", stats!!.dark, Color(0xFF55554E))
+                        StatBar("Zonas oscuras", leaf.dark, Color(0xFF55554E))
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Predominan ${ImageAnalysis.summary(leaf)}.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
                     }
                 }
             }
         }
 
-        if (analyzed && stats == null) {
+        if (analyzed && analysis == null) {
             item {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
@@ -253,7 +354,8 @@ fun DiagnoseScreen() {
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Probá con más luz, acercate a las hojas y evitá fondos muy blancos o muy oscuros.",
+                            "Probá con más luz, acercate a las hojas y evitá fondos muy blancos o muy oscuros. " +
+                                "Igual podés responder las preguntas y ver la recomendación.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = LeafDark
                         )
@@ -271,11 +373,36 @@ fun DiagnoseScreen() {
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         SectionLabel("Contame un poco más")
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Marcá todo lo que veas. Cuantas más respuestas, mejor la recomendación.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        SectionLabel("Riego y tierra")
                         QuestionSwitch("La tierra está seca", soilDry) { soilDry = it }
+                        QuestionSwitch("Regué de más esta semana", overwatered) { overwatered = it }
+                        QuestionSwitch("La maceta no tiene drenaje", noDrainage) { noDrainage = it }
+                        QuestionSwitch("La trasplanté hace poco", recentlyTransplanted) { recentlyTransplanted = it }
+                        QuestionSwitch("Usé fertilizante hace poco", fertilized) { fertilized = it }
+
+                        Spacer(Modifier.height(12.dp))
+                        SectionLabel("Hojas")
                         QuestionSwitch("Veo hojas amarillas", yellowLeaves) { yellowLeaves = it }
                         QuestionSwitch("Veo manchas marrones", brownSpots) { brownSpots = it }
+                        QuestionSwitch("Hojas nuevas deformadas o rizadas", deformedLeaves) { deformedLeaves = it }
+                        QuestionSwitch("Hojas con agujeros", holesInLeaves) { holesInLeaves = it }
+                        QuestionSwitch("Polvo blanco o gris sobre las hojas", whitePowder) { whitePowder = it }
+
+                        Spacer(Modifier.height(12.dp))
+                        SectionLabel("Bichos y ambiente")
+                        QuestionSwitch("Veo bichitos (pulgones, mosquitas)", bugs) { bugs = it }
+                        QuestionSwitch("Tallos blandos u oscuros", softStem) { softStem = it }
+                        QuestionSwitch("Pasó frío o helada", cold) { cold = it }
                         QuestionSwitch("Está en sol directo", directSun) { directSun = it }
+                        QuestionSwitch("Los frutos tienen manchas", spottedFruit) { spottedFruit = it }
                     }
                 }
             }
@@ -315,6 +442,8 @@ fun DiagnoseScreen() {
                             color = LeafDark
                         )
                         Spacer(Modifier.height(12.dp))
+                        SectionLabel("Qué hacer")
+                        Spacer(Modifier.height(6.dp))
                         diagnosis.tips.forEach { tip ->
                             Row(Modifier.padding(bottom = 6.dp)) {
                                 Text("•", color = Sage, style = MaterialTheme.typography.bodyMedium)
@@ -332,7 +461,8 @@ fun DiagnoseScreen() {
 
             item {
                 Text(
-                    "Es una estimación orientativa hecha en tu teléfono, sin internet. Si la planta empeora, consultá con alguien de confianza o un vivero.",
+                    "Es una estimación orientativa hecha en tu teléfono, sin internet. " +
+                        "Si la planta empeora, consultá con alguien de confianza o un vivero.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted
                 )
@@ -350,13 +480,14 @@ fun DiagnoseScreen() {
                         SectionLabel("Cómo funciona")
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            "La app analiza los colores de la foto: cuánto verde, amarillo, marrón y zonas oscuras hay en la planta. Después cruza eso con tus respuestas y te da una recomendación.",
+                            "La app analiza los colores de la foto: cuánto verde, amarillo, marrón y zonas oscuras hay en la planta. " +
+                                "Después cruza eso con tus respuestas y, si elegís la especie, con sus cuidados.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = LeafDark
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "No identifica la especie: para eso hace falta internet o un especialista.",
+                            "No reconoce la especie con certeza: podés elegirla vos para afinar el consejo.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Muted
                         )
@@ -364,6 +495,17 @@ fun DiagnoseScreen() {
                 }
             }
         }
+    }
+
+    if (showPicker) {
+        SpeciesPickerDialog(
+            title = "¿Qué planta es?",
+            onDismiss = { showPicker = false },
+            onPick = {
+                species = it
+                showPicker = false
+            }
+        )
     }
 }
 

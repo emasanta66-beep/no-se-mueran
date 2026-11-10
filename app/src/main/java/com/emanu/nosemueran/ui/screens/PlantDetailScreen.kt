@@ -1,5 +1,6 @@
 package com.emanu.nosemueran.ui.screens
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -59,6 +60,7 @@ import com.emanu.nosemueran.ui.MainViewModel
 import com.emanu.nosemueran.ui.components.InfoChip
 import com.emanu.nosemueran.ui.components.PlantPhoto
 import com.emanu.nosemueran.ui.components.SectionLabel
+import com.emanu.nosemueran.ui.components.SpeciesCareCard
 import com.emanu.nosemueran.ui.components.rememberPhotoPicker
 import com.emanu.nosemueran.ui.dayNumber
 import com.emanu.nosemueran.ui.formatDate
@@ -240,6 +242,16 @@ fun PlantDetailScreen(vm: MainViewModel, nav: NavController, plantId: String) {
                         Text("Ya la regué")
                     }
                 }
+            }
+
+            if (species != null) {
+                Spacer(Modifier.height(20.dp))
+                SpeciesCareCard(
+                    species = species!!,
+                    onOpenDetail = {
+                        nav.navigate("especie/${Uri.encode(species!!.name)}")
+                    }
+                )
             }
 
             if (plant.notes.isNotBlank()) {
